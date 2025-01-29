@@ -1,68 +1,103 @@
-#erreur sur les fluences!!!
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
-from propagation import propagation
+from scipy.constants import c, pi
+import tkinter as tk
+from tkinter import ttk
 
-# Paramètres
-landa = 1030e-9  # Longueur d'onde en mètres (1030 nm)
-waist_0 = 1e-3  # Waist initial (1 mm)
-z = 1.0  # Distance de propagation en mètres
-nbpixel = 512  # Nombre de pixels (grille NxN)
-taillefenetre = 0.01  # Taille de la fenêtre physique (10 mm)
-energie_impulsion = 1e-6  # Énergie par impulsion (1 microjoule)
+# --- Existing function remains unchanged ---
+def gaussian_source(nbpixel, waist, taillefenetre):
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    X, Y = np.meshgrid(x, y)
+    return np.exp(-2 * (X**2 + Y**2) / waist**2)
 
-# Calcul du waist théorique après propagation
-z_r = np.pi * waist_0**2 / landa  # Distance de Rayleigh
-waist_z = waist_0 * np.sqrt(1 + (z / z_r)**2)  # Waist après propagation
+def propagation(source, z, landa, nbpixel, taillefenetre):
+    k = 2 * pi / landa
+    dx = taillefenetre / nbpixel
+    fx = np.fft.fftfreq(nbpixel, d=dx)
+    fy = np.fft.fftfreq(nbpixel, d=dx)
+    FX, FY = np.meshgrid(fx, fy)
+    H = np.exp(1j * k * z * np.sqrt(1 - (landa * FX)**2 - (landa * FY)**2))
+    U1 = np.fft.fftshift(np.fft.fft2(source))
+    U2 = U1 * H
+    return np.abs(np.fft.ifft2(np.fft.ifftshift(U2)))**2
 
-# Calcul de la fluence maximale théorique au centre du faisceau initial
-fluence_max_theorique = (2 * energie_impulsion) / (np.pi * waist_0**2) * 1e-4  # Conversion en J/cm²
+def calculate_fluence(beam_profile, pulse_energy, taillefenetre):
+    area_per_pixel = (taillefenetre / beam_profile.shape[0])**2
+    total_energy = np.sum(beam_profile) * area_per_pixel
+    scaling_factor = pulse_energy / total_energy
+    fluence = beam_profile * scaling_factor / (area_per_pixel * 1e4)  # Conversion to J/cm^2
+    return fluence
 
-# Création de la source gaussienne (front d'onde plan)
-x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-X, Y = np.meshgrid(x, y)
-r2 = X**2 + Y**2
-source = np.exp(-2 * r2 / waist_0**2)  # Source gaussienne (facteur 2 pour une définition d'intensité)
+def theoretical_waist(waist, z, landa):
+    z_r = pi * waist**2 / landa
+    return waist * np.sqrt(1 + (z / z_r)**2)
 
-# Normalisation de la source pour obtenir une énergie totale de 1 µJ
-aire_totale = np.sum(source) * (taillefenetre / nbpixel)**2  # Aire sous la courbe
-source = source * (energie_impulsion / aire_totale)  # Normalisation en énergie
+# --- GUI Setup ---
+def run_simulation():
+    try:
+        nbpixel = int(entry_nbpixel.get())
+        waist = float(entry_waist.get())
+        taillefenetre = float(entry_taillefenetre.get())
+        z = float(entry_z.get())
+        landa = float(entry_landa.get())
+        pulse_energy = float(entry_pulse_energy.get())
 
-# Propagation
-image = propagation(source, z, landa, nbpixel, taillefenetre)
+        # Generate source and propagate
+        source = gaussian_source(nbpixel, waist, taillefenetre)
+        beam_profile = propagation(source, z, landa, nbpixel, taillefenetre)
 
-# Calcul des fluences (en J/cm²)
-dx = taillefenetre / nbpixel  # Taille d'un pixel en mètres
-fluence_initiale = source / (dx**2) * 1e-4  # Conversion en J/cm²
-fluence_finale = np.abs(image)**2 / (dx**2) * 1e-4  # Conversion en J/cm²
+        # Calculate fluence
+        fluence = calculate_fluence(beam_profile, pulse_energy, taillefenetre)
+        theoretical = theoretical_waist(waist, z, landa)
 
-# Affichage des résultats
-plt.figure(figsize=(10, 6))
+        # Plot results
+        x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+        y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+        plt.figure(figsize=(10, 8))
+        plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
+        plt.colorbar(label='Fluence (J/cm^2)')
+        plt.title(f"Beam profile after {z} m propagation\nTheoretical waist: {theoretical:.2e} m")
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.axis('equal')
+        plt.show()
 
-# Fluence initiale
-plt.subplot(1, 2, 1)
-plt.imshow(fluence_initiale, extent=[x[0], x[-1], y[0], y[-1]], cmap='hot')
-plt.colorbar(label="Fluence (J/cm²)")
-plt.title("Fluence initiale (waist = 1 mm)")
-plt.xlabel("x (m)")
-plt.ylabel("y (m)")
+    except ValueError:
+        tk.messagebox.showerror("Input Error", "Please enter valid numerical values.")
 
-# Fluence après propagation
-plt.subplot(1, 2, 2)
-plt.imshow(fluence_finale, extent=[x[0], x[-1], y[0], y[-1]], cmap='hot')
-plt.colorbar(label="Fluence (J/cm²)")
-plt.title(f"Fluence après propagation (z = {z} m)")
-plt.xlabel("x (m)")
-plt.ylabel("y (m)")
+root = tk.Tk()
+root.title("Laser Beam Propagation Simulator")
 
-plt.tight_layout()
-plt.show()
+# Input fields
+frame = ttk.Frame(root, padding="10")
+frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-# Résultat théorique
-print(f"Waist initial : {waist_0 * 1e3:.2f} mm")
-print(f"Waist théorique après propagation : {waist_z * 1e3:.2f} mm")
-print(f"Énergie totale par impulsion : {energie_impulsion * 1e6:.2f} µJ")
-print(f"Fluence maximale théorique initiale : {fluence_max_theorique:.2e} J/cm²")
-print(f"Fluence maximale initiale mesurée : {np.max(fluence_initiale):.2e} J/cm²")
+parameters = [
+    ("Number of pixels", 256),
+    ("Beam waist (m)", 1e-3),
+    ("Window size (m)", 0.01),
+    ("Propagation distance (m)", 1.0),
+    ("Wavelength (m)", 1030e-9),
+    ("Pulse energy (J)", 1e-6),
+]
+
+entries = []
+for i, (label, default) in enumerate(parameters):
+    ttk.Label(frame, text=label).grid(row=i, column=0, sticky=tk.W)
+    entry = ttk.Entry(frame, width=15)
+    entry.grid(row=i, column=1)
+    entry.insert(0, str(default))
+    entries.append(entry)
+
+entry_nbpixel, entry_waist, entry_taillefenetre, entry_z, entry_landa, entry_pulse_energy = entries
+
+# Run button
+button_run = ttk.Button(frame, text="Run Simulation", command=run_simulation)
+button_run.grid(row=len(parameters), columnspan=2)
+
+root.mainloop()
 
