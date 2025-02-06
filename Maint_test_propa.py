@@ -111,16 +111,16 @@ def calculate_fluence(beam_profile, pulse_energy, taillefenetre):
     """
 
     # Taille d'un pixel en m²
-    area_per_pixel = (taillefenetre / beam_profile.shape[0])**2  # en m²
+    area_per_pixel_cm = (taillefenetre*100 / beam_profile.shape[0])**2  # en cm²
 
-    # Normalisation de l'intensité pour que la somme corresponde bien à l'énergie totale
-    total_intensity = np.sum(beam_profile) * area_per_pixel  # en Joules
+    # Somme de tous les ndg cela correspond à toute l'énergie de l'impulsion
+    total_intensity = np.sum(beam_profile)
 
-    # Facteur d'échelle pour ramener l'énergie totale au niveau souhaité
-    scaling_factor = pulse_energy / total_intensity  # Normalisation correcte
+    # le quantum d'énergie (par pixel et par niveau de gris)
+    quantum = pulse_energy/(total_intensity*area_per_pixel_cm)
 
-    # Calcul de la fluence (conversion m² → cm² avec 1e4)
-    fluence = beam_profile * scaling_factor / (area_per_pixel * 1e4)  # en J/cm²
+    # Calcul de la fluence (J/cm²)
+    fluence = beam_profile * quantum  # en J/cm²
 
     return fluence
 
