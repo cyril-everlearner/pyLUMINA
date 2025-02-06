@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 
 
-def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy):
+def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
     """
     Génère un champ électrique gaussien normalisé en V/m,
     de telle sorte que l'énergie totale de l'impulsion corresponde à pulse_energy.
@@ -28,30 +28,49 @@ def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy):
     y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     X, Y = np.meshgrid(x, y)
 
-    # Profil gaussien non normalisé (champ électrique en amplitude)
-    E_field = np.exp(-2 * (X**2 + Y**2) / waist**2)
+    # Profil gaussien normalisé (champ électrique en amplitude, pas de facteur 2 en haut de l'argueent de la gaussienne')
+    E_field = np.exp(- (X**2 + Y**2) / waist**2)
+    E_field = E_field/np.max(E_field)
 
-    # Calcul de l'énergie totale dans la fenêtre
-    area_per_pixel = (taillefenetre / nbpixel)**2  # Aire d'un pixel en m²
-    intensity = E_field**2  # Intensité proportionnelle à |E|²
-    total_energy = np.sum(intensity) * area_per_pixel  # Énergie en Joules
+    # Profil d'intensité
+    beam_int_profile = np.abs(E_field)**2
 
-    # Normalisation pour obtenir l'énergie totale correcte
-    scaling_factor = np.sqrt(pulse_energy / total_energy)  # √ car E_field² donne l'intensité
-    E_field *= scaling_factor  # Mise à l'échelle du champ électrique
-    print(np.max(np.max(E_field)))
-    print(np.max(np.max(intensity)))
-    print(total_energy)
+    # Taille d'un pixel en m²
+    area_per_pixel_cm = (taillefenetre*100 / nbpixel**2)  # en cm²
+
+    # Somme de tous les ndg -> cela correspond à toute l'énergie de l'impulsion
+    total_intensity = np.sum(beam_int_profile)
+
+    # le quantum d'énergie (par pixel et par niveau de gris)
+    quantum = pulse_energy/(total_intensity*area_per_pixel_cm)
+
+    # Calcul de la fluence (J/cm²)
+    fluence = beam_int_profile * quantum  # en J/cm²
+
+    # Calcul du champ élec en V/m
+    E_field_Vpm = np.sqrt(2*fluence*0.0001/(0.0024975*pulse_FWHM))
+    
+    print('max elec field : ',np.max(np.max(E_field_Vpm)),' V/m')
+    print('max fluence : ',np.max(np.max(fluence)),' J/cm2')
+    
  # Plot results
     x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     plt.figure(figsize=(10, 8))
-    plt.pcolormesh(x, y, intensity, shading='auto', cmap='inferno')
-    plt.colorbar(label='intensity (J/cm^2)')
+    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
+    plt.colorbar(label='fluence de la source (J/cm^2)')
     plt.axis('equal')
     plt.show()
 
-    return E_field  # Retourne un champ électrique en V/m
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    plt.figure(figsize=(10, 8))
+    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
+    plt.colorbar(label='E_field_Vpm de la source (V/m)')
+    plt.axis('equal')
+    plt.show()
+
+    return E_field_Vpm  # Retourne un champ électrique en V/m
 
 
 def propagation(source, z, landa, nbpixel, taillefenetre):
@@ -93,16 +112,16 @@ def propagation(source, z, landa, nbpixel, taillefenetre):
     # test conservation energie
     if (energy_output>energy_input*1.01) or (energy_output<energy_input*0.99):
         tk.messagebox.showerror("Calculus Error", "Breaking the energy conservation law (see propagation function)")
-    print(energy_input)
-    print(energy_output)
+    print('verif conservation energie input',energy_input)
+    print('verif conservation energie output',energy_output)
     return image
 
-def calculate_fluence(beam_profile, pulse_energy, taillefenetre):
+def calculate_fluence(beam_int_profile, pulse_energy, taillefenetre):
     """
     Calcule la fluence (J/cm²) à partir du profil d'intensité du faisceau.
 
     Paramètres :
-    - beam_profile : ndarray, matrice du profil d'intensité (normalisé ou en intensité relative)
+    - beam_int_profile : ndarray, matrice du profil d'intensité (normalisé ou en intensité relative)
     - pulse_energy : float, énergie de l'impulsion en Joules
     - taillefenetre : float, taille physique de la fenêtre d'analyse en mètres
 
@@ -111,16 +130,16 @@ def calculate_fluence(beam_profile, pulse_energy, taillefenetre):
     """
 
     # Taille d'un pixel en m²
-    area_per_pixel_cm = (taillefenetre*100 / beam_profile.shape[0])**2  # en cm²
+    area_per_pixel_cm = (taillefenetre*100 / beam_int_profile.shape[0])**2  # en cm²
 
     # Somme de tous les ndg cela correspond à toute l'énergie de l'impulsion
-    total_intensity = np.sum(beam_profile)
+    total_intensity = np.sum(beam_int_profile)
 
     # le quantum d'énergie (par pixel et par niveau de gris)
     quantum = pulse_energy/(total_intensity*area_per_pixel_cm)
 
     # Calcul de la fluence (J/cm²)
-    fluence = beam_profile * quantum  # en J/cm²
+    fluence = beam_int_profile * quantum  # en J/cm²
 
     return fluence
 
@@ -137,9 +156,10 @@ def run_simulation():
         z = float(entry_z.get())
         landa = float(entry_landa.get())
         pulse_energy = float(entry_pulse_energy.get())
+        pulse_FWHM = float(entry_pulse_FWHM.get())
 
         # Generate source and propagate
-        source = gaussian_source(nbpixel, waist, taillefenetre, pulse_energy)
+        source = gaussian_source(nbpixel, waist, taillefenetre, pulse_energy,pulse_FWHM)
         beam_field = propagation(source, z, landa, nbpixel, taillefenetre)
 
         # Calculate fluence
@@ -176,6 +196,7 @@ parameters = [
     ("Propagation distance (m)", 1.0),
     ("Wavelength (m)", 1030e-9),
     ("Pulse energy (J)", 1e-6),
+    ("Pulse FWHM (s)", 1e-13),
 ]
 
 entries = []
@@ -186,7 +207,7 @@ for i, (label, default) in enumerate(parameters):
     entry.insert(0, str(default))
     entries.append(entry)
 
-entry_nbpixel, entry_waist, entry_taillefenetre, entry_z, entry_landa, entry_pulse_energy = entries
+entry_nbpixel, entry_waist, entry_taillefenetre, entry_z, entry_landa, entry_pulse_energy, entry_pulse_FWHM = entries
 
 # Run button
 button_run = ttk.Button(frame, text="Run Simulation", command=run_simulation)
