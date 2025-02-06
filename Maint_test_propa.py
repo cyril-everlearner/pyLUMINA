@@ -7,16 +7,57 @@ from scipy.constants import c, pi
 import tkinter as tk
 from tkinter import ttk
 
-# --- Existing function remains unchanged ---
-def gaussian_source(nbpixel, waist, taillefenetre):
+
+def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy):
+    """
+    Génère un champ électrique gaussien normalisé en V/m,
+    de telle sorte que l'énergie totale de l'impulsion corresponde à pulse_energy.
+
+    Paramètres :
+    - nbpixel : int, nombre de pixels de la grille
+    - waist : float, taille du waist du faisceau en mètres
+    - taillefenetre : float, taille de la fenêtre physique en mètres
+    - pulse_energy : float, énergie de l'impulsion en Joules
+
+    Retour :
+    - champ_gaussien : ndarray, champ électrique en V/m
+    """
+
+    # Grille spatiale
     x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     X, Y = np.meshgrid(x, y)
-    return np.exp(-2 * (X**2 + Y**2) / waist**2)
+
+    # Profil gaussien non normalisé (champ électrique en amplitude)
+    E_field = np.exp(-2 * (X**2 + Y**2) / waist**2)
+
+    # Calcul de l'énergie totale dans la fenêtre
+    area_per_pixel = (taillefenetre / nbpixel)**2  # Aire d'un pixel en m²
+    intensity = E_field**2  # Intensité proportionnelle à |E|²
+    total_energy = np.sum(intensity) * area_per_pixel  # Énergie en Joules
+
+    # Normalisation pour obtenir l'énergie totale correcte
+    scaling_factor = np.sqrt(pulse_energy / total_energy)  # √ car E_field² donne l'intensité
+    E_field *= scaling_factor  # Mise à l'échelle du champ électrique
+    print(np.max(np.max(E_field)))
+    print(np.max(np.max(intensity)))
+    print(total_energy)
+ # Plot results
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    plt.figure(figsize=(10, 8))
+    plt.pcolormesh(x, y, intensity, shading='auto', cmap='inferno')
+    plt.colorbar(label='intensity (J/cm^2)')
+    plt.axis('equal')
+    plt.show()
+
+    return E_field  # Retourne un champ électrique en V/m
+
 
 def propagation(source, z, landa, nbpixel, taillefenetre):
     """
     Fonction de propagation en approximation scalaire non paraxiale.
+    vérifie si conservation énergie à 1% près
     
     Paramètres :
     - source : np.ndarray, la matrice représentant le plan objet.
@@ -29,6 +70,7 @@ def propagation(source, z, landa, nbpixel, taillefenetre):
     - image : np.ndarray, la matrice représentant le plan image après propagation.
     """
     nb = nbpixel // 2  # Position centrale
+    energy_input = np.sum(np.abs(source)**2) # Calcul Energie (somme des pixels)
 
     # Transformée de Fourier de la source
     TFsource = np.fft.fft2(np.fft.fftshift(source))
@@ -46,13 +88,40 @@ def propagation(source, z, landa, nbpixel, taillefenetre):
     # Plan image
     image = np.fft.ifftshift(np.fft.ifft2(TFsource * noyau2))
     
+    energy_output = np.sum(np.abs(image)**2) # Calcul Energie (somme des pixels)
+
+    # test conservation energie
+    if (energy_output>energy_input*1.01) or (energy_output<energy_input*0.99):
+        tk.messagebox.showerror("Calculus Error", "Breaking the energy conservation law (see propagation function)")
+    print(energy_input)
+    print(energy_output)
     return image
 
 def calculate_fluence(beam_profile, pulse_energy, taillefenetre):
-    area_per_pixel = (taillefenetre / beam_profile.shape[0])**2
-    total_energy = np.sum(beam_profile) * area_per_pixel
-    scaling_factor = pulse_energy / total_energy
-    fluence = beam_profile * scaling_factor / (area_per_pixel * 1e4)  # Conversion to J/cm^2
+    """
+    Calcule la fluence (J/cm²) à partir du profil d'intensité du faisceau.
+
+    Paramètres :
+    - beam_profile : ndarray, matrice du profil d'intensité (normalisé ou en intensité relative)
+    - pulse_energy : float, énergie de l'impulsion en Joules
+    - taillefenetre : float, taille physique de la fenêtre d'analyse en mètres
+
+    Retour :
+    - fluence : ndarray, fluence en J/cm²
+    """
+
+    # Taille d'un pixel en m²
+    area_per_pixel = (taillefenetre / beam_profile.shape[0])**2  # en m²
+
+    # Normalisation de l'intensité pour que la somme corresponde bien à l'énergie totale
+    total_intensity = np.sum(beam_profile) * area_per_pixel  # en Joules
+
+    # Facteur d'échelle pour ramener l'énergie totale au niveau souhaité
+    scaling_factor = pulse_energy / total_intensity  # Normalisation correcte
+
+    # Calcul de la fluence (conversion m² → cm² avec 1e4)
+    fluence = beam_profile * scaling_factor / (area_per_pixel * 1e4)  # en J/cm²
+
     return fluence
 
 def theoretical_waist(waist, z, landa):
@@ -70,7 +139,7 @@ def run_simulation():
         pulse_energy = float(entry_pulse_energy.get())
 
         # Generate source and propagate
-        source = gaussian_source(nbpixel, waist, taillefenetre)
+        source = gaussian_source(nbpixel, waist, taillefenetre, pulse_energy)
         beam_field = propagation(source, z, landa, nbpixel, taillefenetre)
 
         # Calculate fluence
