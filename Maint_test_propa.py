@@ -20,7 +20,7 @@ def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
     - pulse_energy : float, énergie de l'impulsion en Joules
 
     Retour :
-    - champ_gaussien : ndarray, champ électrique en V/m
+    - E_field_Vpm : ndarray, champ électrique en V/m
     """
 
     # Grille spatiale
@@ -28,7 +28,7 @@ def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
     y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
     X, Y = np.meshgrid(x, y)
 
-    # Profil gaussien normalisé (champ électrique en amplitude, pas de facteur 2 en haut de l'argueent de la gaussienne')
+    # Profil gaussien normalisé (champ électrique en amplitude, pas de facteur 2 en haut de l'argument de la gaussienne')
     E_field = np.exp(- (X**2 + Y**2) / waist**2)
     E_field = E_field/np.max(E_field)
 
@@ -48,27 +48,29 @@ def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
     fluence = beam_int_profile * quantum  # en J/cm²
 
     # Calcul du champ élec en V/m
-    E_field_Vpm = np.sqrt(2*fluence*0.0001/(0.0024975*pulse_FWHM))
-    
-    print('max elec field : ',np.max(np.max(E_field_Vpm)),' V/m')
-    print('max fluence : ',np.max(np.max(fluence)),' J/cm2')
-    
- # Plot results
-    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-    plt.figure(figsize=(10, 8))
-    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
-    plt.colorbar(label='fluence de la source (J/cm^2)')
-    plt.axis('equal')
-    plt.show()
+    E_field_Vpm = np.sqrt(2*0.94*fluence*0.0001/(2.6550e-03*pulse_FWHM))
 
-    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
-    plt.figure(figsize=(10, 8))
-    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
-    plt.colorbar(label='E_field_Vpm de la source (V/m)')
-    plt.axis('equal')
-    plt.show()
+
+# # Pour les tests, pour voir ce qu'il se passe. 
+#    print('max elec field : ',np.max(np.max(E_field_Vpm)),' V/m')
+#    print('max fluence : ',np.max(np.max(fluence)),' J/cm2')
+#    
+# # Plot results
+#    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+#    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+#    plt.figure(figsize=(10, 8))
+#    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
+#    plt.colorbar(label='fluence de la source (J/cm^2)')
+#    plt.axis('equal')
+#    plt.show()
+#
+#    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+#    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+#    plt.figure(figsize=(10, 8))
+#    plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
+#    plt.colorbar(label='E_field_Vpm de la source (V/m)')
+#    plt.axis('equal')
+#    plt.show()
 
     return E_field_Vpm  # Retourne un champ électrique en V/m
 
@@ -112,36 +114,10 @@ def propagation(source, z, landa, nbpixel, taillefenetre):
     # test conservation energie
     if (energy_output>energy_input*1.01) or (energy_output<energy_input*0.99):
         tk.messagebox.showerror("Calculus Error", "Breaking the energy conservation law (see propagation function)")
-    print('verif conservation energie input',energy_input)
-    print('verif conservation energie output',energy_output)
+#    print('verif conservation energie input',energy_input)
+#    print('verif conservation energie output',energy_output)
     return image
 
-def calculate_fluence(beam_int_profile, pulse_energy, taillefenetre):
-    """
-    Calcule la fluence (J/cm²) à partir du profil d'intensité du faisceau.
-
-    Paramètres :
-    - beam_int_profile : ndarray, matrice du profil d'intensité (normalisé ou en intensité relative)
-    - pulse_energy : float, énergie de l'impulsion en Joules
-    - taillefenetre : float, taille physique de la fenêtre d'analyse en mètres
-
-    Retour :
-    - fluence : ndarray, fluence en J/cm²
-    """
-
-    # Taille d'un pixel en m²
-    area_per_pixel_cm = (taillefenetre*100 / beam_int_profile.shape[0])**2  # en cm²
-
-    # Somme de tous les ndg cela correspond à toute l'énergie de l'impulsion
-    total_intensity = np.sum(beam_int_profile)
-
-    # le quantum d'énergie (par pixel et par niveau de gris)
-    quantum = pulse_energy/(total_intensity*area_per_pixel_cm)
-
-    # Calcul de la fluence (J/cm²)
-    fluence = beam_int_profile * quantum  # en J/cm²
-
-    return fluence
 
 def theoretical_waist(waist, z, landa):
     z_r = pi * waist**2 / landa
@@ -164,7 +140,7 @@ def run_simulation():
 
         # Calculate fluence
         beam_profile = np.abs(beam_field)**2
-        fluence = calculate_fluence(beam_profile, pulse_energy, taillefenetre)
+        fluence = (pulse_FWHM*3e8*8.85e-12*np.abs(beam_field)**2)/(2*0.94)*1e4 #calcul à partir du chp électrique V/m
         theoretical = theoretical_waist(waist, z, landa)
 
         # Plot results
@@ -173,11 +149,15 @@ def run_simulation():
         plt.figure(figsize=(10, 8))
         plt.pcolormesh(x, y, fluence, shading='auto', cmap='inferno')
         plt.colorbar(label='Fluence (J/cm^2)')
-        plt.title(f"Beam profile after {z} m propagation\nTheoretical waist: {theoretical:.2e} m")
+        plt.title(f"Beam Fluence after {z} m propagation\nTheoretical waist: {theoretical:.2e} m\nMax Fluence: {np.max(np.max(fluence))} J/cm^2")
         plt.xlabel("x (m)")
         plt.ylabel("y (m)")
         plt.axis('equal')
         plt.show()
+
+
+#        print('max fluence1 : ',np.max(np.max(fluence)),' J/cm2')
+#        print('max fluence2 : ',np.max(np.max(fluence2)),' J/cm2')
 
     except ValueError:
         tk.messagebox.showerror("Input Error", "Please enter valid numerical values.")
