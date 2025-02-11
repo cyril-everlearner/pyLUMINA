@@ -180,6 +180,30 @@ def theoretical_waist(waist, z, landa):
     return waist * np.sqrt(1 + (z / z_r)**2)
 
 
+
+def apply_aperture(source, aperture_type, width, taillefenetre):
+    """ Tronque le champ selon l'ouverture choisie (disk, square, triangle, annulus). """
+    nbpixel = source.shape[0]
+    x = np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel)
+    y = np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel)
+    X, Y = np.meshgrid(x, y)
+    
+    aperture = np.zeros_like(source)
+
+    if aperture_type == "disk":
+        aperture = (X**2 + Y**2 <= (width/2)**2).astype(float)
+    elif aperture_type == "square":
+        aperture = (np.abs(X) <= width/2) & (np.abs(Y) <= width/2)
+    elif aperture_type == "triangle":
+        H = width * np.sqrt(3) / 2  # Hauteur du triangle équilatéral
+        aperture = (Y >= -H/2) & (Y <= (H/width) * (width/2 - np.abs(X)))
+    elif aperture_type == "annulus":
+        outer_radius = width / 2
+        inner_radius = outer_radius * 0.9  # Épaisseur = 10% du diamètre
+        aperture = ((X**2 + Y**2 <= outer_radius**2) & (X**2 + Y**2 >= inner_radius**2)).astype(float)
+
+    return source * aperture
+
 def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
     """ Affiche une visualisation de la fluence propagée."""
     # Création de la figure
