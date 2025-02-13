@@ -21,6 +21,11 @@ import matplotlib.pyplot as plt
 from scipy.constants import c, pi
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog
+from datetime import datetime
+import os
+import imageio
+
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import plotly.graph_objects as go  # pour la fig 3D
@@ -288,73 +293,8 @@ def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
 #    canvas.draw()
 
 
-def plot_propagation_3D(fields, z_planes, taillefenetre):
-    """ Affiche une visualisation de la fluence propagée en 3D"""
-    # rendu 3D
-    max_fluence = fields.max()
-    nbpixel = fields.shape[1]
-   
-    X, Y, Z = np.meshgrid(
-            z_planes,
-            np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel),
-            np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel),
-            indexing='ij'
-    )
-    fig_3d = go.Figure(data=go.Volume(
-        x=X.flatten(),
-        y=Y.flatten(),
-        z=Z.flatten(),
-        value=fields.flatten(),
-        isomin=0.01353*max_fluence, # iso surface at 0.1/e2
-        isomax=0.9*max_fluence,
-        opacity=0.2, # needs to be small to see through all surfaces
-        surface_count=30, # nombre des isosurfaces
-        colorbar=dict(title="Fluence (J/cm²)")
-        ))
-"""    fig_3d = go.Figure()  # pour des iso surfaces à des fluences précises
-#    isovalues = [0.01353 * max_fluence, 0.1353 * max_fluence, 0.5 * max_fluence, 0.9 * max_fluence]
-#    colors = ['black', 'purple', 'red', 'yellow']
-#
-#    for iso, color in zip(isovalues, colors):
-#        fig_3d.add_trace(go.Isosurface(
-#            x=X.flatten(),
-#            y=Y.flatten(),
-#            z=Z.flatten(),
-#            value=fields.flatten(),
-#            isomin=iso,
-#            isomax=iso,
-#            opacity=0.3,
-#            surface_count=1,
-#            caps=dict(x_show=False, y_show=False, z_show=False),
-#            colorscale=[[0, color], [1, color]],
-#            showscale=True,
-#            colorbar=dict(title="Fluence (J/cm²)")
-#        ))
-#    
-#        
-    fig_3d.update_layout(
-        title=f"Fluence max: {max_fluence:.2e} J/cm²",
-        scene=dict(
-            xaxis_title="Propagation Axis (m)",
-            yaxis_title="y (m)",
-            zaxis_title="x (m)"
-        )
-    )
 
-
-    plt.show()
-    fig_3d.show()
-"""
-import numpy as np
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import imageio
-import os
-import tkinter as tk
-from tkinter import filedialog
-from datetime import datetime
-
-def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parameters=None):
+def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parameters=None, apply_lens=False, cmap="inferno"):
     """ Affiche la fluence propagée en 3D et enregistre un GIF si demandé. """
     
     # Définition des axes
@@ -400,6 +340,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
         root = tk.Tk()
         root.withdraw()  # Ne pas afficher la fenêtre principale Tkinter
         save_dir = filedialog.askdirectory(title="Choisir le dossier de sauvegarde")
+        root.destroy()
         if not save_dir:  # Si l'utilisateur annule, ne rien faire
             print("Sauvegarde annulée.")
             return
@@ -419,7 +360,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
 
             # Image en fausse couleur
             fig, ax = plt.subplots()
-            cax = ax.imshow(fluence_map, cmap="inferno", extent=[-taillefenetre/2, taillefenetre/2, -taillefenetre/2, taillefenetre/2])
+            cax = ax.imshow(fluence_map, cmap=cmap, extent=[-taillefenetre/2, taillefenetre/2, -taillefenetre/2, taillefenetre/2])
             plt.colorbar(cax, label="Fluence (J/cm²)")
             ax.set_xlabel("x (m)")
             ax.set_ylabel("y (m)")
@@ -447,6 +388,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
             f.write(f"GIF Simulation - {timestamp}\n")
             f.write(f"Min Fluence: {min_fluence:.2e} J/cm²\n")
             f.write(f"Max Fluence: {max_fluence:.2e} J/cm²\n\n")
+            f.write(f"Lens is applied? : {'Yes' if apply_lens else 'No'}\n\n")
             f.write("Simulation Parameters:\n")
             for param_name, param_value in parameters:
                 f.write(f"{param_name}: {param_value}\n")

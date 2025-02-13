@@ -1,8 +1,19 @@
-Some Python code and functions to simulate beam laser beam propagation.
-Chosse a scenario to explore some nice effects.
+Welcome to pyLUMINAE - Laser Unveiling Modelling for Interactive Numerical Applications
 
-Please participate on the Github if you'd like to consider some new scenarios based on the available functions.
+Some hopefully decent enough Python code and functions to properly simulate laser beam propagation.
+Choose or write a "scenario" to explore some intriguing coherent light propagation effects (Bessel beams, Airy beams)
 
+Please participate on the Github if you'd like to consider writing some new scenarios based on the available functions.
+
+#How to use it?
+
+Download the files and run the 'Main_scenario_selector.py' with python3. 
+Then choose a Scenario and enjoy the calculation and nice graphics.
+
+#How to contribute?
+I'm not very familiar with Github, but I believe you can propose some new scenarios that will be simply additionnal files. 
+
+#Licence
 Author: Cyril Mauclair, LPhiA Angers, France.
 
 License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -36,3 +47,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
