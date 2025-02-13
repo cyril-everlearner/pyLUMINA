@@ -1,10 +1,9 @@
 '''
-Looking at diffraction of apertured gaussian laser beam. Fluence maps are in J/cm2.
-Beware of the aperture size with respect to the Gausian waist depending on what you want.
-e.g for a uniform disk, make sure to set apertur width >> gaussian waist and so on.
-
+Looking at diffraction of apertured gaussian laser beam with or without focusing through a lens. Fluence maps are in J/cm2.
+Beware of the aperture size with respect to the Gaussian waist depending on what you want.
+e.g for a uniform disk, make sure to set apertur width >> gaussian waist and so on. 
 You can choose the colormap, berlin or coolwarm are particularly appropriate to highlight
-low intensity fluence rings
+low intensity fluence rings.
 
 Author: Cyril Mauclair, LPhiA Angers, France.
 
@@ -17,15 +16,23 @@ Under the following terms:
 - Attribution: You must give appropriate credit, provide a link to the license, 
   and indicate if changes were made. You may do so in any reasonable manner, 
   but not in any way that suggests the licensor endorses you or your use.
+
+
+The GUI Tkinter theme is Azure-ttk-theme, under the MIT License
+
+Copyright (c) 2021 rdbende
+'''
+
+import os
 import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
-'''
-
 import matplotlib.pyplot as plt
 from scipy.constants import c, pi
 import tkinter as tk
 from tkinter import ttk
+
+
 
 from laser_prop_functions import *
 
@@ -45,12 +52,18 @@ def run_simulation():
         # Génération du champ source
         source = gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM)
 
-        # Application de l'ouverture choisie
-        source = apply_aperture(source, aperture_type, aperture_width, taillefenetre)
+        # Application de l'ouverture choisie si activée
+        if apply_aperture_var.get():            
+            source = apply_aperture(source, aperture_type, aperture_width, taillefenetre)
 
-        # Calcul du rayon théorique de la tâche d'Airy
+        # Ajout de la phase parabolique si activé
+        if apply_lens_phase_var.get():
+            f = float(entry_focal_length.get())
+            source = apply_lens_phase(source, f, taillefenetre, landa)
+
+        # Calcul du rayon théorique de la tâche d'Airy (effet lentille négligé))
         airy_diameter = airy_disk_radius(landa, aperture_width, z)
-        print(f"Airy radius : {airy_diameter:.2e} m")
+        print(f"Airy radius (without lens!): {airy_diameter:.2e} m")
 
         # Propagation
         z_planes = np.linspace(0, z, nbplane)
@@ -69,13 +82,29 @@ def run_simulation():
         plot_propagation_2D(fluence3D, z_planes, taillefenetre, cmap_selected)
 
         if wanna_go_3D.get():
-            plot_propagation_3D(fluence3D, z_planes, taillefenetre)
+            plot_propagation_3D(fluence3D, z_planes, taillefenetre, recordGIF=True, parameters=parameters)
 
     except ValueError:
         tk.messagebox.showerror("Input Error", "Please enter valid numerical values.")
 
 
 root = tk.Tk()
+
+# Définition de l'icône
+icon_path = "logo.png"  # Fichier ICO (Windows) ou PNG (Linux/Mac)
+icon = tk.PhotoImage(file=icon_path)
+root.iconphoto(True, icon)
+
+# Thème de la GUI
+# Définir le chemin vers le fichier azure.tcl
+theme_path = os.path.join(os.path.dirname(__file__), "Azure-ttk-theme-main", "azure.tcl")
+
+# Charger le thème Azure
+root.tk.call("source", theme_path)
+
+# Définir le thème en mode clair ou sombre
+root.tk.call("set_theme", "light")  # Ou "light"
+
 root.title("Laser Beam Propagation Simulator 3D")
 
 # Interface
@@ -92,6 +121,7 @@ parameters = [
     ("Pulse FWHM (s)", 1e-13),
     ("Number of planes", 10),
     ("Aperture width (m)", 2e-3),
+    ("Focal Length (m):", 1),
 ]
 
 entries = []
@@ -102,9 +132,9 @@ for i, (label, default) in enumerate(parameters):
     entry.insert(0, str(default))
     entries.append(entry)
 
-entry_nbpixel, entry_waist, entry_taillefenetre, entry_z, entry_landa, entry_pulse_energy, entry_pulse_FWHM, entry_nbplane, entry_aperture_width = entries
+entry_nbpixel, entry_waist, entry_taillefenetre, entry_z, entry_landa, entry_pulse_energy, entry_pulse_FWHM, entry_nbplane, entry_aperture_width, entry_focal_length = entries
 
-# Menu déroulant pour choisir le type d'ouverture
+# Choix du type d'ouverture
 aperture_var = tk.StringVar(value="disk")
 aperture_label = ttk.Label(frame, text="Aperture Type:")
 aperture_label.grid(row=len(parameters), column=0, sticky=tk.W)
@@ -113,10 +143,14 @@ aperture_options = ["disk", "square", "triangle", "annulus"]
 aperture_menu = ttk.Combobox(frame, textvariable=aperture_var, values=aperture_options, state="readonly")
 aperture_menu.grid(row=len(parameters), column=1)
 
+apply_aperture_var = tk.BooleanVar(value=True)
+checkbox_lens = ttk.Checkbutton(frame, text="Apply Aperture?", variable=apply_aperture_var)
+checkbox_lens.grid(row=len(parameters), column=2,columnspan=1, sticky=tk.W)
+
 # Checkbox pour affichage 3D
 wanna_go_3D = tk.BooleanVar(value=False)
 checkbox = ttk.Checkbutton(frame, text="Wanna go 3D?", variable=wanna_go_3D)
-checkbox.grid(row=len(parameters) + 1, columnspan=2, sticky=tk.W)
+checkbox.grid(row=len(parameters) + 2, column=2, sticky=tk.W)
 
 # Choix de la colormap
 colormap_var = tk.StringVar(value="coolwarm")
@@ -127,9 +161,24 @@ colormap_options = ["inferno", "viridis", "plasma", "magma", "cividis", "jet", "
 colormap_menu = ttk.Combobox(frame, textvariable=colormap_var, values=colormap_options, state="readonly")
 colormap_menu.grid(row=len(parameters) + 2, column=1)
 
+# Ajout des éléments de la GUI pour la focale
+apply_lens_phase_var = tk.BooleanVar(value=False)
+checkbox_lens = ttk.Checkbutton(frame, text="Apply Lens Phase?", variable=apply_lens_phase_var)
+checkbox_lens.grid(row=len(parameters) - 1, column=2,columnspan=1, sticky=tk.W)
+
+# Ajout d'un bouton pour changer de thème
+def toggle_theme():
+    current_theme = root.tk.call("ttk::style", "theme", "use")
+    new_theme = "light" if current_theme == "azure-dark" else "dark"
+    root.tk.call("set_theme", new_theme)
+theme_button = ttk.Button(frame, text="Dark/light Theme", command=toggle_theme)
+theme_button.grid(row=0, column=2)
+
 # Bouton pour lancer la simulation
-button_run = ttk.Button(frame, text="Run Simulation", command=run_simulation)
-button_run.grid(row=len(parameters) + 3, columnspan=2)
+button_run = ttk.Button(frame, text="Run Simulation",style='Accent.TButton', command=run_simulation)
+button_run.grid(row=len(parameters) + 6, column = 1)
+
+
 
 root.mainloop()
 

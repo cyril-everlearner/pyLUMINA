@@ -26,6 +26,32 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import plotly.graph_objects as go  # pour la fig 3D
 
 
+def apply_lens_phase(source, f, taillefenetre, landa):
+    """
+    Apply a parabolic phase shift to simulate a thin lens of focal length f.
+    
+    Parameters:
+    source (numpy array): The input electric field distribution (complex).
+    f (float): Focal length of the lens (m).
+    taillefenetre (float): Spatial window size (m).
+    landa (float): Wavelength of the beam (m).
+
+    Returns:
+    numpy array: The modified electric field after passing through the lens.
+    """
+    nbpixel = source.shape[0]  # Assuming square grid
+    k = 2 * np.pi / landa  # Wavenumber
+    
+    # Create spatial coordinate grid
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    X, Y = np.meshgrid(x, x)
+    
+    # Apply the quadratic phase shift of a thin lens
+    phase_lens = np.exp(-1j * k * (X**2 + Y**2) / (2 * f))
+    
+    return source * phase_lens
+
+
 def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
     """
     Génère un champ électrique gaussien normalisé en V/m,
@@ -238,14 +264,14 @@ def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
   
     CS1 = ax[1, 0].contour(fields[-1], extent=[-taillefenetre/2, taillefenetre/2, -taillefenetre/2, taillefenetre/2])
     ax[1, 0].clabel(CS1, fontsize=10)
-    ax[1, 0].set_title(f"Iso-fluences à z={z_planes[-1]:.2f} m")
+    ax[1, 0].set_title(f"Iso-fluences @ z={z_planes[-1]:.2f} m")
     ax[1, 0].set_xlabel("y (m)")
     ax[1, 0].set_ylabel("y (m)")
     ax[1, 0].grid(True, linestyle='dotted')
     
     CS2 = ax[1, 1].contour(np.transpose(fields[:, y_index, :]), extent=[-taillefenetre/2, taillefenetre/2, z_planes[0], z_planes[-1]])
     ax[1, 1].clabel(CS2, fontsize=10)
-    ax[1, 1].set_title("Iso-fluences (coupe YZ)")
+    ax[1, 1].set_title("Iso-fluences (YZ cut)")
     ax[1, 1].set_xlabel("y (m)")
     ax[1, 1].set_ylabel("z (m)")
     ax[1, 1].grid(True, linestyle='dotted')
@@ -285,7 +311,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre):
         surface_count=30, # nombre des isosurfaces
         colorbar=dict(title="Fluence (J/cm²)")
         ))
-#    fig_3d = go.Figure()
+"""    fig_3d = go.Figure()  # pour des iso surfaces à des fluences précises
 #    isovalues = [0.01353 * max_fluence, 0.1353 * max_fluence, 0.5 * max_fluence, 0.9 * max_fluence]
 #    colors = ['black', 'purple', 'red', 'yellow']
 #
@@ -318,6 +344,117 @@ def plot_propagation_3D(fields, z_planes, taillefenetre):
 
     plt.show()
     fig_3d.show()
+"""
+import numpy as np
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import imageio
+import os
+import tkinter as tk
+from tkinter import filedialog
+from datetime import datetime
+
+def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parameters=None):
+    """ Affiche la fluence propagée en 3D et enregistre un GIF si demandé. """
+    
+    # Définition des axes
+    max_fluence = fields.max()
+    min_fluence = fields.min()
+    nbpixel = fields.shape[1]
+    
+    X, Y, Z = np.meshgrid(
+        z_planes,
+        np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel),
+        np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel),
+        indexing='ij'
+    )
+    
+    # Création de la figure 3D
+    fig_3d = go.Figure(data=go.Volume(
+        x=X.flatten(),
+        y=Y.flatten(),
+        z=Z.flatten(),
+        value=fields.flatten(),
+        isomin=0.01353 * max_fluence,  # iso surface at 0.1/e2
+        isomax=0.9 * max_fluence,
+        opacity=0.2,  # needs to be small to see through all surfaces
+        surface_count=30,  # nombre des isosurfaces
+        colorbar=dict(title="Fluence (J/cm²)")
+    ))
+    
+    fig_3d.update_layout(
+        title=f"Fluence max: {max_fluence:.2e} J/cm²",
+        scene=dict(
+            xaxis_title="Propagation Axis (m)",
+            yaxis_title="y (m)",
+            zaxis_title="x (m)"
+        )
+    )
+
+    # Affichage
+    fig_3d.show()
+
+    # Si enregistrement GIF demandé
+    if recordGIF:
+        # Boîte de dialogue pour choisir le dossier de sauvegarde
+        root = tk.Tk()
+        root.withdraw()  # Ne pas afficher la fenêtre principale Tkinter
+        save_dir = filedialog.askdirectory(title="Choisir le dossier de sauvegarde")
+        if not save_dir:  # Si l'utilisateur annule, ne rien faire
+            print("Sauvegarde annulée.")
+            return
+        
+        # Générer le nom des fichiers avec date et heure
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        color_gif_filename = os.path.join(save_dir, f"GIFstack_colormap_{timestamp}.gif")
+        grey_gif_filename = os.path.join(save_dir, f"GIFstack_greylevels_{timestamp}.gif")
+        readme_filename = os.path.join(save_dir, f"GIF_readme_{timestamp}.txt")
+
+        # Création des images pour le GIF
+        images_color = []
+        images_grey = []
+        
+        for i in range(fields.shape[0]):  # Boucle sur les plans de propagation
+            fluence_map = fields[i]
+
+            # Image en fausse couleur
+            fig, ax = plt.subplots()
+            cax = ax.imshow(fluence_map, cmap="inferno", extent=[-taillefenetre/2, taillefenetre/2, -taillefenetre/2, taillefenetre/2])
+            plt.colorbar(cax, label="Fluence (J/cm²)")
+            ax.set_xlabel("x (m)")
+            ax.set_ylabel("y (m)")
+            plt.title(f"Fluence - Plane {i+1}/{fields.shape[0]}")
+            plt.savefig("temp_color.png", dpi=100)
+            plt.close()
+            images_color.append(imageio.imread("temp_color.png"))
+
+            # Image en niveaux de gris (8 bits)
+            fluence_map_normalized = (fluence_map - min_fluence) / (max_fluence - min_fluence) * 255
+            fluence_map_8bit = fluence_map_normalized.astype(np.uint8)
+            imageio.imwrite("temp_grey.png", fluence_map_8bit)
+            images_grey.append(imageio.imread("temp_grey.png"))
+
+        # Création du GIF
+        imageio.mimsave(color_gif_filename, images_color, duration=0.1)
+        imageio.mimsave(grey_gif_filename, images_grey, duration=0.1)
+
+        # Suppression des fichiers temporaires
+        os.remove("temp_color.png")
+        os.remove("temp_grey.png")
+
+        # Création du fichier README
+        with open(readme_filename, "w") as f:
+            f.write(f"GIF Simulation - {timestamp}\n")
+            f.write(f"Min Fluence: {min_fluence:.2e} J/cm²\n")
+            f.write(f"Max Fluence: {max_fluence:.2e} J/cm²\n\n")
+            f.write("Simulation Parameters:\n")
+            for param_name, param_value in parameters:
+                f.write(f"{param_name}: {param_value}\n")
+
+        print(f"GIF en fausse couleur sauvegardé sous : {color_gif_filename}")
+        print(f"GIF en niveaux de gris sauvegardé sous : {grey_gif_filename}")
+        print(f"Fichier README sauvegardé sous : {readme_filename}")
+
 
 
 

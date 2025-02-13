@@ -55,6 +55,22 @@ def run_selected_script():
 
 # GUI Setup
 root = tk.Tk()
+
+# Définition de l'icône
+icon_path = "logo.png"  # Fichier ICO (Windows) ou PNG (Linux/Mac)
+icon = tk.PhotoImage(file=icon_path)
+root.iconphoto(True, icon)
+
+# Thème de la GUI
+# Définir le chemin vers le fichier azure.tcl
+theme_path = os.path.join(os.path.dirname(__file__), "Azure-ttk-theme-main", "azure.tcl")
+
+# Charger le thème Azure
+root.tk.call("source", theme_path)
+
+# Définir le thème en mode clair ou sombre
+root.tk.call("set_theme", "light")  # Ou "light"
+
 root.title("Choose the scenario you want to run")
 
 script_listbox = tk.Listbox(root, width=50, height=10)
@@ -67,6 +83,8 @@ for script in scripts:
 
 doc_text = scrolledtext.ScrolledText(root, width=60, height=10, state=tk.DISABLED)
 doc_text.pack()
+
+
 
 run_button = tk.Button(root, text="Exécuter", command=run_selected_script)
 run_button.pack()
