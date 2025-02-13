@@ -210,6 +210,32 @@ def theoretical_waist(waist, z, landa):
     z_r = pi * waist**2 / landa
     return waist * np.sqrt(1 + (z / z_r)**2)
 
+def apply_axiconic_phase(field, angle, taillefenetre, landa):
+    """
+    Applique une phase axiconique au champ laser.
+    
+    :param field: Champ laser complexe.
+    :param angle: Angle physique de l'axicon en degrés.
+    :param taillefenetre: Taille de la fenêtre spatiale (m).
+    :param landa: Longueur d'onde du laser (m).
+    :return: Champ modifié avec la phase axiconique.
+    """
+    nbpixel = field.shape[0]
+    k = 2 * np.pi / landa  # Nombre d'onde
+    alpha = np.radians(angle)  # Conversion en radians
+
+    # Création des coordonnées spatiales
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    y = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    X, Y = np.meshgrid(x, y)
+
+    # Calcul du rayon en coordonnées polaires
+    R = np.sqrt(X**2 + Y**2)
+
+    # Phase axiconique : exp(i k R sin(alpha))
+    phase_axicon = np.exp(-1j * k * R * np.sin(alpha))
+
+    return field * phase_axicon
 
 
 def apply_aperture(source, aperture_type, width, taillefenetre):
@@ -234,6 +260,14 @@ def apply_aperture(source, aperture_type, width, taillefenetre):
         aperture = ((X**2 + Y**2 <= outer_radius**2) & (X**2 + Y**2 >= inner_radius**2)).astype(float)
 
     return source * aperture
+
+def apply_cubic_phase(field, taillefenetre, nbpixel, cubic_coeff):
+    """Applique une phase cubique pour générer un Airy beam."""
+    x = np.linspace(-1/2, 1/2, nbpixel)
+    X, Y = np.meshgrid(x, x)
+    r3 = X**3 + Y**3  # Phase cubique sur pupille normalisée
+    phi_cubic = cubic_coeff * r3
+    return field * np.exp(1j * phi_cubic)
 
 def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
     """ Affiche une visualisation de la fluence propagée."""

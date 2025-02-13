@@ -18,8 +18,8 @@ import subprocess
 from PIL import Image, ImageTk, ImageOps
 
 def list_python_scripts():
-    """Lists all Python scripts starting with 'Scenario' in the current directory."""
-    return [f for f in os.listdir('.') if f.startswith("Scenario") and f.endswith(".py")]
+    """Lists all Python scripts starting with 'Scenario' in the current directory, sorted alphabetically."""
+    return sorted([f for f in os.listdir('.') if f.startswith("Scenario") and f.endswith(".py")])
 
 def show_docstring(event):
     """Displays the docstring of the selected Python script in the text box."""
