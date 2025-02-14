@@ -59,7 +59,6 @@ def run_simulation():
             axicon_angle = float(entry_axicon_angle.get())
             source = apply_axiconic_phase(source, axicon_angle, taillefenetre, landa)
 
-
         # Applying the selected aperture if enabled
         if apply_aperture_var.get():
             source = apply_aperture(source, aperture_type, aperture_width, taillefenetre)
@@ -68,6 +67,9 @@ def run_simulation():
         if apply_lens_phase_var.get():
             f = float(entry_focal_length.get())
             source = apply_lens_phase(source, f, taillefenetre, landa)
+
+
+
 
         # Propagation simulation over multiple planes
         z_planes = np.linspace(0, z, nbplane)
@@ -84,6 +86,9 @@ def run_simulation():
 
         # Display 2D fluence maps
         plot_propagation_2D(fluence3D, z_planes, taillefenetre, cmap_selected)
+        
+        # Display Phase maps
+        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="gray")
         
         # If 3D visualization is selected, generate and save 3D fluence distribution
         if wanna_go_3D.get():

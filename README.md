@@ -1,4 +1,4 @@
-Welcome to pyLUMINAE - Laser Unveiling Modelling for Interactive Numerical Applications
+Welcome to pyLUMINA - Laser Unveiling Modelling for Interactive Numerical Applications
 
 Some hopefully decent enough Python code and functions to properly simulate laser beam propagation.
 Choose or write a "scenario" to explore some intriguing coherent light propagation effects (Bessel beams, Airy beams)

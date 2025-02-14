@@ -28,6 +28,8 @@ import imageio
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+from scipy.constants import pi
+
 import plotly.graph_objects as go  # pour la fig 3D
 
 
@@ -168,6 +170,65 @@ def propagation(source, z, landa, nbpixel, taillefenetre):
 #    print('verif conservation energie output',energy_output)
     return image
 
+
+def propagation_n2(source, z, landa, nbpixel, taillefenetre, n2=3.2e-19, dz=1e-6):
+    """
+    Fonction de propagation scalaire non paraxiale avec effet non linéaire n2.
+    Utilise la méthode BPM (Beam Propagation Method) en ajoutant une phase non linéaire à chaque pas dz.
+    
+    Paramètres :
+    - source : np.ndarray, champ électrique initial (V/m).
+    - z : float, distance de propagation (m).
+    - landa : float, longueur d'onde (m).
+    - nbpixel : int, nombre de pixels dans une dimension.
+    - taillefenetre : float, taille physique de la fenêtre de calcul (m).
+    - n2 : float, coefficient de Kerr (m²/W) (défaut : valeur élevée du CS₂).
+    - dz : float, pas de propagation (m) (défaut : 1 µm).
+
+    Retourne :
+    - image : np.ndarray, champ électrique après propagation.
+    """
+    nb = nbpixel // 2  # Position centrale
+    k0 = 2 * pi / landa  # Nombre d'onde dans le vide
+    energy_input = np.sum(np.abs(source)**2)  # Énergie d'entrée
+
+    # Grille spatiale
+    m, n = np.meshgrid(range(1, nbpixel + 1), range(1, nbpixel + 1), indexing='ij')
+
+    # Noyau de propagation scalaire non paraxiale
+    noyau1 = np.exp(1j * k0 * dz * np.sqrt(1 - landa**2 * 
+              (((m - nb - 1)**2 + (n - nb - 1)**2) / taillefenetre**2)))
+    noyau2 = np.fft.fftshift(noyau1)
+
+    # Initialisation du champ
+    E = source.astype(np.complex128)
+    
+    # Nombre d'étapes en dz
+    steps = int(z / dz)
+
+    for _ in range(steps):
+        # Appliquer la phase non linéaire
+        I = np.abs(E)**2  # Intensité locale
+        E *= np.exp(1j * k0 * n2 * I * dz)
+
+        # Transformée de Fourier
+        TF_E = np.fft.fft2(np.fft.fftshift(E))
+
+        # Propagation dans l'espace de Fourier
+        TF_E *= noyau2
+
+        # Retour à l'espace direct
+        E = np.fft.ifftshift(np.fft.ifft2(TF_E))
+
+    energy_output = np.sum(np.abs(E)**2)  # Énergie de sortie
+
+    # Vérification conservation d'énergie
+    if not (0.99 * energy_input <= energy_output <= 1.01 * energy_input):
+        tk.messagebox.showerror("Calculus Error", "Breaking the energy conservation law (see propagationn2 function)")
+
+    return E
+
+
 def circular_pupil(source, width, taillefenetre):
     """
     Tronque le champ électrique laser par un disque de diamètre 'width'.
@@ -269,6 +330,50 @@ def apply_cubic_phase(field, taillefenetre, nbpixel, cubic_coeff):
     phi_cubic = cubic_coeff * r3
     return field * np.exp(1j * phi_cubic)
 
+def apply_helical_phase(field, l, taillefenetre, nbpixel):
+    """Applies a helical phase to the laser field."""
+    x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
+    X, Y = np.meshgrid(x, x)
+    theta = np.angle(X + 1j * Y)
+    return field * np.exp(1j * l * theta)
+
+def apply_IFTA_phase(source, taillefenetre, landa, f, n_spots, iterations=50):
+    """Computes the phase mask for multispot generation using the IFTA method."""
+    nbpixel = source.shape[0]
+    k = 2 * pi / landa
+
+    # Compute focal spot size (Airy disk radius)
+    waist_focal = 1.22 * landa * f / (2 * (taillefenetre / nbpixel))
+    #print("taille spot (m)",waist_focal)
+
+    # Define target amplitude in the Fourier plane
+    target = np.zeros((nbpixel, nbpixel), dtype=np.complex128)
+    center = nbpixel // 2
+    spacing = 20#int(50 * waist_focal / (taillefenetre / nbpixel))  # Separation between spots
+
+    for i in range(n_spots):
+        x_pos = center + (i - (n_spots - 1) / 2) * spacing
+        if 0 <= x_pos < nbpixel:
+            target[nbpixel // 2, int(x_pos)] = 1  # Line of spots along X
+
+    # Initialize phase with backpropagated phase of the target
+    field = np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(target)))
+    phase = np.angle(field)
+
+    # IFTA iterations
+    amplitude_source = np.abs(source)
+    for _ in range(iterations):
+        field = amplitude_source * np.exp(1j * phase)  # Apply phase to initial amplitude
+        field_f = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(field)))  # Forward FFT
+        field_f = target * np.exp(1j * np.angle(field_f))  # Enforce target amplitude
+        field = np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(field_f)))  # Backward FFT
+        phase = np.angle(field)  # Extract updated phase
+
+    return source * np.exp(1j * phase)  # Apply optimized phase
+
+
+
+
 def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
     """ Affiche une visualisation de la fluence propagée."""
     # Création de la figure
@@ -317,14 +422,36 @@ def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
     
     plt.tight_layout()
     plt.show()
-# # Intégration dans l'interface Tkinter
-#    global canvas
-#    if 'canvas' in globals():
-#        canvas.get_tk_widget().destroy()  # Supprime l'ancien graphique si présent
-#  
-#    canvas = FigureCanvasTkAgg(fig, master=frame_plot)
-#    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-#    canvas.draw()
+
+def plot_phase_2D(cplx_fields, z_planes, taillefenetre, cmap="inferno"):
+    """ Affiche une visualisation de la phase propagée."""
+    # Création de la figure
+    global fig, ax
+    fig, ax = plt.subplots(1, 2, figsize=(8, 8))
+    
+    # Affichage de la phase du champ à z=0
+    phase = np.angle(cplx_fields)
+    im = ax[0].imshow(phase[0], extent=[-taillefenetre/2, taillefenetre/2, -taillefenetre/2, taillefenetre/2], cmap=cmap)
+    ax[0].set_title(f"Phase (rad) @ z={z_planes[0]:.2f} m")
+    ax[0].set_xlabel("y (m)")
+    ax[0].set_ylabel("x (m)")
+    plt.colorbar(im, ax=ax[0])
+    
+    # Coupe 2D du profil axial (YZ) avec inversion des axes
+    y_index = phase.shape[1] // 2  # Coupe au centre
+    im2 = ax[1].imshow(
+        np.transpose(phase[:, y_index, :]),  # Transposition pour faire correspondre les axes
+        aspect='auto',
+        extent=[z_planes[0], z_planes[-1], -taillefenetre/2, taillefenetre/2],  # Inversion des axes
+        cmap=cmap
+    )
+    ax[1].set_title("Lateral view (rad) (YZ)")
+    ax[1].set_xlabel("Propagation axis (m)")
+    ax[1].set_ylabel("x (m)")
+    plt.colorbar(im2, ax=ax[1])
+       
+    plt.tight_layout()
+    plt.show()
 
 
 

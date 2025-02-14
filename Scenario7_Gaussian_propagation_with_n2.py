@@ -1,10 +1,11 @@
 '''
-Looking at diffraction of an apertured Gaussian laser beam with or without focusing through a lens.
+Looking at diffraction of a Gaussian laser beam with or without focusing through a lens.
 Fluence maps are in J/cm². The laser electric field is calculated in V/m.
 Be careful with the aperture size relative to the Gaussian waist, depending on what you want to study.
 
-The default values shows a Airy type beam by applying a cubic phase. 
-The cubic phase is simply a coefficient c applied to the normalized X and Y pupil, thus the phase ranges between 0 and c³ on the circular pupil.
+Here we evaluate the nonlinear effect associated with the propagation inside a medium with n2.
+Carefull, the results are not quantitative YET, it is just a quantitative representation right now,
+so the defaults value are not realistic yet I believe, they have to be double checked..
 
 By clicking on "Wanna go 3D": You can save the stack of propagated planes as a GIF in both false color and grayscale (8-bit).
 A "GIF_readme.txt" file is also saved, providing additional details for anyone who wants to analyze the files later.
@@ -54,6 +55,12 @@ def run_simulation():
 
         # Generating the Gaussian beam source
         source = gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM)
+        
+        # Apply IFTA phase if enabled
+        if apply_IFTA_var.get():
+            f = float(entry_focal_length.get())
+            n_spots = int(entry_n_spots.get())
+            source = apply_IFTA_phase(source, taillefenetre, landa, f, n_spots)
 
         # Applying axiconic phase
         if apply_axicon_phase_var.get():
@@ -74,12 +81,14 @@ def run_simulation():
             f = float(entry_focal_length.get())
             source = apply_lens_phase(source, f, taillefenetre, landa)
 
-        # Propagation simulation over multiple planes
+        # Propagation simulation over multiple planes with n2
         z_planes = np.linspace(0, z, nbplane)
+        dz = z/nbplane
+        n2 = float(entry_n2.get())
         propagated_fields = np.zeros((nbplane, nbpixel, nbpixel), dtype=np.complex128)
 
         for i, z in enumerate(z_planes):
-            propagated_fields[i] = propagation(source, z, landa, nbpixel, taillefenetre)
+            propagated_fields[i] = propagation_n2(source, z, landa, nbpixel, taillefenetre, n2, dz)
 
         # Compute fluence distribution
         fluence3D = (pulse_FWHM * c * 8.85e-12 * np.abs(propagated_fields)**2) / (2 * 0.94) * 1e4  # Convert to J/cm²
@@ -91,7 +100,7 @@ def run_simulation():
         plot_propagation_2D(fluence3D, z_planes, taillefenetre, cmap_selected)
 
         # Display Phase maps
-        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="gray")
+        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="jet")
         
         # If 3D visualization is selected, generate and save 3D fluence distribution
         if wanna_go_3D.get():
@@ -123,11 +132,11 @@ frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 # Simulation parameters
 parameters = [
     ("Number of pixels", 256),
-    ("Beam waist (m)", 0.005),
+    ("Beam waist (m)", 0.002),
     ("Window size (m)", 0.02),
-    ("Propagation distance (m)", 3.0),
+    ("Propagation distance (m)", 2),
     ("Wavelength (m)", 1030e-9),
-    ("Pulse energy (J)", 1e-6),
+    ("Pulse energy (J)", 1e-2),
     ("Pulse FWHM (s)", 1e-13),
     ("Number of planes", 10),
     ("Aperture width (m)", 1e-2),
@@ -167,7 +176,7 @@ checkbox_lens.grid(row=len(parameters) - 1, column=2, sticky=tk.W)
 ttk.Label(frame, text="Axicon Angle (deg):").grid(row=len(parameters) + 1, column=0, sticky=tk.W)
 entry_axicon_angle = ttk.Entry(frame, width=15)
 entry_axicon_angle.grid(row=len(parameters) + 1, column=1)
-entry_axicon_angle.insert(0, "0.1")  # Valeur par défaut
+entry_axicon_angle.insert(0, "0")  # Valeur par défaut
 
 # Checkbox pour activer/désactiver la phase axiconique
 apply_axicon_phase_var = tk.BooleanVar(value=False)
@@ -175,28 +184,45 @@ checkbox_axicon = ttk.Checkbutton(frame, text="Apply Axicon Phase?", variable=ap
 checkbox_axicon.grid(row=len(parameters) + 1, column=2, sticky=tk.W)
 
 # Checkbox pour activer/désactiver la phase cubique
-apply_cubic_var = tk.BooleanVar(value=True)
+apply_cubic_var = tk.BooleanVar(value=False)
 checkbox_cubic = ttk.Checkbutton(frame, text="Apply Cubic Phase?", variable=apply_cubic_var)
-checkbox_cubic.grid(row=len(parameters)+2, column=2, sticky=tk.W)
+checkbox_cubic.grid(row=ln2 = float(entry_n2.get())en(parameters)+2, column=2, sticky=tk.W)
 
 # Champ pour le coef phase cubique (pupille normalisée donc des radians directement)
 ttk.Label(frame, text="Cubic Phase Coefficient (rad):").grid(row=len(parameters)+2, column=0, sticky=tk.W)
 entry_cubic_coeff = ttk.Entry(frame, width=15)
 entry_cubic_coeff.grid(row=len(parameters)+2, column=1)
-entry_cubic_coeff.insert(0, "1000")
+entry_cubic_coeff.insert(0, "0")
+
+# Nonlinear index n2
+ttk.Label(frame, text="Nonlinear Index n2 (m²/W):").grid(row=len(parameters) + 5, column=0, sticky=tk.W)
+entry_n2 = ttk.Entry(frame, width=15)
+entry_n2.grid(row=len(parameters) + 5, column=1)
+entry_n2.insert(0, "3.2e-19")
+
+# Nb spot IFTA fields
+ttk.Label(frame, text="Number of spots:").grid(row=len(parameters) + 3, column=0, sticky=tk.W)
+entry_n_spots = ttk.Entry(frame, width=15)
+entry_n_spots.grid(row=len(parameters)+3, column=1)
+entry_n_spots.insert(0, "7")
+
+# Apply IFTA checkbox
+apply_IFTA_var = tk.BooleanVar(value=False)
+checkbox_IFTA = ttk.Checkbutton(frame, text="Apply IFTA Phase?", variable=apply_IFTA_var)
+checkbox_IFTA.grid(row=len(parameters) + 3, column=2, sticky=tk.W)
 
 # 3D visualization checkbox
 wanna_go_3D = tk.BooleanVar(value=False)
 checkbox_3D = ttk.Checkbutton(frame, text="Wanna go 3D?", variable=wanna_go_3D)
-checkbox_3D.grid(row=len(parameters) + 3, column=2, sticky=tk.W)
+checkbox_3D.grid(row=len(parameters) + 4, column=2, sticky=tk.W)
 
 # Colormap selection menu
 colormap_var = tk.StringVar(value="coolwarm")
 colormap_label = ttk.Label(frame, text="Colormap:")
-colormap_label.grid(row=len(parameters) + 3, column=0, sticky=tk.W)
+colormap_label.grid(row=len(parameters) + 4, column=0, sticky=tk.W)
 colormap_options = ["inferno", "viridis", "plasma", "magma", "cividis", "jet", "gray", "berlin", "coolwarm"]
 colormap_menu = ttk.Combobox(frame, textvariable=colormap_var, values=colormap_options, state="readonly")
-colormap_menu.grid(row=len(parameters) + 3, column=1)
+colormap_menu.grid(row=len(parameters) + 4, column=1)
 
 
 # Theme toggle button

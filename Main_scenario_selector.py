@@ -1,4 +1,6 @@
 """
+PyLUMINA : Laser Unveiling Modelling for Interactive Numerical Applications
+
 Author: Cyril Mauclair
 License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
 This work is licensed under the Creative Commons Attribution 4.0 International License.

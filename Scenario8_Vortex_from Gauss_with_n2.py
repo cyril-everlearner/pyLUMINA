@@ -3,8 +3,8 @@ Looking at diffraction of an apertured Gaussian laser beam with or without focus
 Fluence maps are in J/cm². The laser electric field is calculated in V/m.
 Be careful with the aperture size relative to the Gaussian waist, depending on what you want to study.
 
-The default values shows a Airy type beam by applying a cubic phase. 
-The cubic phase is simply a coefficient c applied to the normalized X and Y pupil, thus the phase ranges between 0 and c³ on the circular pupil.
+The default values shows a vortex beam generated from a Gaussian beam and a helical phase and some n2 showing a fliamentary-type propagation.
+Beware that the n2 is not yet quantitatively verified, so take the results with caution!
 
 By clicking on "Wanna go 3D": You can save the stack of propagated planes as a GIF in both false color and grayscale (8-bit).
 A "GIF_readme.txt" file is also saved, providing additional details for anyone who wants to analyze the files later.
@@ -65,6 +65,10 @@ def run_simulation():
             cubic_coeff = float(entry_cubic_coeff.get())
             source = apply_cubic_phase(source, taillefenetre, nbpixel, cubic_coeff)
 
+        # Applying helical phase (vortex beam)
+        if apply_helical_var.get():
+            helical_coeff = float(entry_helical_coeff.get())
+            source = apply_helical_phase(source, helical_coeff, taillefenetre, nbpixel)
         # Applying the selected aperture if enabled
         if apply_aperture_var.get():
             source = apply_aperture(source, aperture_type, aperture_width, taillefenetre)
@@ -74,12 +78,20 @@ def run_simulation():
             f = float(entry_focal_length.get())
             source = apply_lens_phase(source, f, taillefenetre, landa)
 
+            
+
         # Propagation simulation over multiple planes
         z_planes = np.linspace(0, z, nbplane)
+        dz = z/nbplane
+        n2 = 0
+
+        # Applying the n2 or not
+        if apply_n2.get():
+            n2 = float(entry_n2.get())
         propagated_fields = np.zeros((nbplane, nbpixel, nbpixel), dtype=np.complex128)
 
         for i, z in enumerate(z_planes):
-            propagated_fields[i] = propagation(source, z, landa, nbpixel, taillefenetre)
+            propagated_fields[i] = propagation_n2(source, z, landa, nbpixel, taillefenetre, n2, dz)
 
         # Compute fluence distribution
         fluence3D = (pulse_FWHM * c * 8.85e-12 * np.abs(propagated_fields)**2) / (2 * 0.94) * 1e4  # Convert to J/cm²
@@ -91,7 +103,7 @@ def run_simulation():
         plot_propagation_2D(fluence3D, z_planes, taillefenetre, cmap_selected)
 
         # Display Phase maps
-        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="gray")
+        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="jet")
         
         # If 3D visualization is selected, generate and save 3D fluence distribution
         if wanna_go_3D.get():
@@ -127,7 +139,7 @@ parameters = [
     ("Window size (m)", 0.02),
     ("Propagation distance (m)", 3.0),
     ("Wavelength (m)", 1030e-9),
-    ("Pulse energy (J)", 1e-6),
+    ("Pulse energy (J)", .3),
     ("Pulse FWHM (s)", 1e-13),
     ("Number of planes", 10),
     ("Aperture width (m)", 1e-2),
@@ -175,7 +187,7 @@ checkbox_axicon = ttk.Checkbutton(frame, text="Apply Axicon Phase?", variable=ap
 checkbox_axicon.grid(row=len(parameters) + 1, column=2, sticky=tk.W)
 
 # Checkbox pour activer/désactiver la phase cubique
-apply_cubic_var = tk.BooleanVar(value=True)
+apply_cubic_var = tk.BooleanVar(value=False)
 checkbox_cubic = ttk.Checkbutton(frame, text="Apply Cubic Phase?", variable=apply_cubic_var)
 checkbox_cubic.grid(row=len(parameters)+2, column=2, sticky=tk.W)
 
@@ -185,18 +197,38 @@ entry_cubic_coeff = ttk.Entry(frame, width=15)
 entry_cubic_coeff.grid(row=len(parameters)+2, column=1)
 entry_cubic_coeff.insert(0, "1000")
 
+# Adding UI elements for helical phase and nonlinearity index
+apply_helical_var = tk.BooleanVar(value=True)
+checkbox_helical = ttk.Checkbutton(frame, text="Apply Helical Phase?", variable=apply_helical_var)
+checkbox_helical.grid(row=len(parameters) + 3, column=2, sticky=tk.W)
+
+ttk.Label(frame, text="Helical Phase Coefficient (rad):").grid(row=len(parameters) + 3, column=0, sticky=tk.W)
+entry_helical_coeff = ttk.Entry(frame, width=15)
+entry_helical_coeff.grid(row=len(parameters) + 3, column=1)
+entry_helical_coeff.insert(0, "1")
+
+# Checkbox pour activer/désactiver le n2
+apply_n2 = tk.BooleanVar(value=True)
+checkbox_n2 = ttk.Checkbutton(frame, text="Apply n2?", variable=apply_n2)
+checkbox_n2.grid(row=len(parameters)+4, column=2, sticky=tk.W)
+
+ttk.Label(frame, text="Nonlinear Index n2 (m²/W):").grid(row=len(parameters) + 4, column=0, sticky=tk.W)
+entry_n2 = ttk.Entry(frame, width=15)
+entry_n2.grid(row=len(parameters) + 4, column=1)
+entry_n2.insert(0, "3.2e-19")
+
 # 3D visualization checkbox
 wanna_go_3D = tk.BooleanVar(value=False)
 checkbox_3D = ttk.Checkbutton(frame, text="Wanna go 3D?", variable=wanna_go_3D)
-checkbox_3D.grid(row=len(parameters) + 3, column=2, sticky=tk.W)
+checkbox_3D.grid(row=len(parameters) + 5, column=2, sticky=tk.W)
 
 # Colormap selection menu
-colormap_var = tk.StringVar(value="coolwarm")
+colormap_var = tk.StringVar(value="berlin")
 colormap_label = ttk.Label(frame, text="Colormap:")
-colormap_label.grid(row=len(parameters) + 3, column=0, sticky=tk.W)
+colormap_label.grid(row=len(parameters) + 5, column=0, sticky=tk.W)
 colormap_options = ["inferno", "viridis", "plasma", "magma", "cividis", "jet", "gray", "berlin", "coolwarm"]
 colormap_menu = ttk.Combobox(frame, textvariable=colormap_var, values=colormap_options, state="readonly")
-colormap_menu.grid(row=len(parameters) + 3, column=1)
+colormap_menu.grid(row=len(parameters) + 5, column=1)
 
 
 # Theme toggle button
