@@ -73,7 +73,7 @@ def run_simulation():
             source = apply_cubic_phase(source, taillefenetre, nbpixel, cubic_coeff)
 
         # Applying blur on phase 
-        if entry_blur_sigma.get():
+        if apply_blur_var.get():
             blur_sigma = float(entry_blur_sigma.get())
             source = apply_blur(source, blur_sigma)
 
@@ -105,7 +105,7 @@ def run_simulation():
         plot_propagation_2D(fluence3D, z_planes, taillefenetre, cmap_selected)
 
         # Display Phase maps
-        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="jet")
+        plot_phase_2D(propagated_fields, z_planes, taillefenetre, cmap="gray")
         
         # If 3D visualization is selected, generate and save 3D fluence distribution
         if wanna_go_3D.get():
@@ -136,12 +136,12 @@ frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
 # Simulation parameters
 parameters = [
-    ("Number of pixels", 256),
+    ("Number of pixels", 512),
     ("Beam waist (m)", 0.002),
     ("Window size (m)", 0.02),
-    ("Propagation distance (m)", 2),
+    ("Propagation distance (m)", 1.1),
     ("Wavelength (m)", 1030e-9),
-    ("Pulse energy (J)", 1e-2),
+    ("Pulse energy (J)", 1e-6),
     ("Pulse FWHM (s)", 1e-13),
     ("Number of planes", 10),
     ("Aperture width (m)", 1e-2),
@@ -173,7 +173,7 @@ checkbox_aperture = ttk.Checkbutton(frame, text="Apply Aperture?", variable=appl
 checkbox_aperture.grid(row=len(parameters), column=2, sticky=tk.W)
 
 # Lens phase checkbox
-apply_lens_phase_var = tk.BooleanVar(value=False)
+apply_lens_phase_var = tk.BooleanVar(value=True)
 checkbox_lens = ttk.Checkbutton(frame, text="Apply Lens Phase?", variable=apply_lens_phase_var)
 checkbox_lens.grid(row=len(parameters) - 1, column=2, sticky=tk.W)
 
@@ -212,7 +212,7 @@ entry_n_spots.grid(row=len(parameters)+3, column=1)
 entry_n_spots.insert(0, "7")
 
 # Apply IFTA checkbox
-apply_IFTA_var = tk.BooleanVar(value=False)
+apply_IFTA_var = tk.BooleanVar(value=True)
 checkbox_IFTA = ttk.Checkbutton(frame, text="Apply IFTA Phase?", variable=apply_IFTA_var)
 checkbox_IFTA.grid(row=len(parameters) + 3, column=2, sticky=tk.W)
 

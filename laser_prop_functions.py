@@ -29,6 +29,7 @@ import imageio
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from scipy.constants import pi
+from scipy.ndimage import gaussian_filter
 
 import plotly.graph_objects as go  # pour la fig 3D
 
@@ -330,6 +331,14 @@ def apply_cubic_phase(field, taillefenetre, nbpixel, cubic_coeff):
     phi_cubic = cubic_coeff * r3
     return field * np.exp(1j * phi_cubic)
 
+def apply_parabolic_phase(field, taillefenetre, nbpixel, Second_order_coeff):
+    """adds a parabolic phase modulation."""
+    x = np.linspace(-1/2, 1/2, nbpixel)
+    X, Y = np.meshgrid(x, x)
+    r2 = X**2  # Phase parabolique sur pupille normalisée
+    phi_parabol = Second_order_coeff * r2
+    return field * np.exp(1j * phi_parabol)
+
 def apply_helical_phase(field, l, taillefenetre, nbpixel):
     """Applies a helical phase to the laser field."""
     x = np.linspace(-taillefenetre / 2, taillefenetre / 2, nbpixel)
@@ -372,6 +381,26 @@ def apply_IFTA_phase(source, taillefenetre, landa, f, n_spots, iterations=50):
     return source * np.exp(1j * phase)  # Apply optimized phase
 
 
+def apply_blur(field, blur_sigma):
+    """
+    Applique un flou gaussien à la phase spatiale d'un faisceau laser.
+    
+    Paramètres :
+    - field : np.ndarray, champ laser (complexe).
+    - blur_sigma : float, largeur du flou gaussien (en pixels).
+    
+    Retourne :
+    - np.ndarray : champ avec phase floutée.
+    """
+    # Extraire l'amplitude et la phase
+    amplitude = np.abs(field)
+    phase = np.angle(field)
+    
+    # Appliquer un flou gaussien à la phase
+    blurred_phase = gaussian_filter(phase, sigma=blur_sigma)
+    
+    # Reconstruire le champ avec la phase floutée
+    return amplitude * np.exp(1j * blurred_phase)
 
 
 def plot_propagation_2D(fields, z_planes, taillefenetre, cmap="inferno"):
@@ -496,6 +525,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
     fig_3d.show()
 
     # Si enregistrement GIF demandé
+# Si enregistrement GIF demandé
     if recordGIF:
         # Boîte de dialogue pour choisir le dossier de sauvegarde
         root = tk.Tk()
@@ -505,7 +535,11 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
         if not save_dir:  # Si l'utilisateur annule, ne rien faire
             print("Sauvegarde annulée.")
             return
-        
+
+        # Création du sous-dossier pour les PNGs des colormaps
+        png_save_dir = os.path.join(save_dir, "GIFSpngs")
+        os.makedirs(png_save_dir, exist_ok=True)
+
         # Générer le nom des fichiers avec date et heure
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         color_gif_filename = os.path.join(save_dir, f"GIFstack_colormap_{timestamp}.gif")
@@ -515,7 +549,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
         # Création des images pour le GIF
         images_color = []
         images_grey = []
-        
+
         for i in range(fields.shape[0]):  # Boucle sur les plans de propagation
             fluence_map = fields[i]
 
@@ -526,10 +560,17 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
             ax.set_xlabel("x (m)")
             ax.set_ylabel("y (m)")
             plt.title(f"Fluence - Plane {i+1}/{fields.shape[0]}")
-            plt.savefig("temp_color.png", dpi=100)
+            
+            temp_color_path = "temp_color.png"
+            plt.savefig(temp_color_path, dpi=100)
             plt.close()
-            images_color.append(imageio.imread("temp_color.png"))
 
+            images_color.append(imageio.imread(temp_color_path))
+
+            # Sauvegarde de l'image colormap en PNG dans GIFSpngs
+            png_filename = os.path.join(png_save_dir, f"frame_{i+1}.png")
+            os.rename(temp_color_path, png_filename)  # Déplace le fichier temporaire
+    
             # Image en niveaux de gris (8 bits)
             fluence_map_normalized = (fluence_map - min_fluence) / (max_fluence - min_fluence) * 255
             fluence_map_8bit = fluence_map_normalized.astype(np.uint8)
@@ -540,8 +581,7 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
         imageio.mimsave(color_gif_filename, images_color, duration=0.1)
         imageio.mimsave(grey_gif_filename, images_grey, duration=0.1)
 
-        # Suppression des fichiers temporaires
-        os.remove("temp_color.png")
+        # Suppression du fichier temporaire grey
         os.remove("temp_grey.png")
 
         # Création du fichier README
@@ -556,10 +596,8 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
 
         print(f"GIF en fausse couleur sauvegardé sous : {color_gif_filename}")
         print(f"GIF en niveaux de gris sauvegardé sous : {grey_gif_filename}")
+        print(f"Images colormap sauvegardées dans : {png_save_dir}")
         print(f"Fichier README sauvegardé sous : {readme_filename}")
-
-
-
 
 
 
