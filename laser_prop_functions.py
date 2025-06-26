@@ -25,6 +25,7 @@ from tkinter import filedialog
 from datetime import datetime
 import os
 import imageio
+from scipy.signal import fftconvolve
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -58,6 +59,32 @@ def apply_lens_phase(source, f, taillefenetre, landa):
     phase_lens = np.exp(-1j * k * (X**2 + Y**2) / (2 * f))
     
     return source * phase_lens
+
+def apply_tilt_phase(source, tilt_range, taillefenetre, landa):
+    """
+    Apply a parabolic phase shift to simulate a tilt of tilt_range rad
+    over the pupil.
+    
+    Parameters:
+    source (numpy array): The input electric field distribution (complex).
+    tilt_range (float): tilt in rad.
+    taillefenetre (float): Spatial window size (m).
+    landa (float): Wavelength of the beam (m).
+
+    Returns:
+    numpy array: The modified electric field after adding the tilt.
+    """
+    nbpixel = source.shape[0]  # Assuming square grid
+    k = 2 * np.pi / landa  # Wavenumber
+    
+    # Create spatial coordinate grid
+    x = np.linspace(0, tilt_range, nbpixel)
+    X, Y = np.meshgrid(x, x)
+        
+    # Apply the tilt phase
+    phase_tilt = np.exp(-1j * k * tilt_range *Y)
+    
+    return source * phase_tilt
 
 
 def gaussian_source(nbpixel, waist, taillefenetre, pulse_energy, pulse_FWHM):
@@ -381,6 +408,66 @@ def apply_IFTA_phase(source, taillefenetre, landa, f, n_spots, iterations=50):
     return source * np.exp(1j * phase)  # Apply optimized phase
 
 
+
+
+def apply_IFTA_top_hat(source, taillefenetre, landa, f, ratio_radius_on_waist, iterations=50):
+    """
+    Computes the phase mask for top-hat generation using the IFTA method, 
+    with a soft-edged target obtained by convolving a binary top-hat 
+    with a Gaussian approximation of the focal spot (PSF).
+    
+    Parameters:
+    - source: 2D complex array, initial field amplitude at SLM.
+    - taillefenetre: physical size of simulation window (in meters).
+    - landa: wavelength (in meters).
+    - f: focal length of the lens (in meters).
+    - ratio_radius_on_waist: scaling factor of top-hat radius over Airy disk radius.
+    - iterations: number of IFTA iterations.
+
+    Returns:
+    - final field with optimized phase applied: 2D complex array.
+    """
+    nbpixel = source.shape[0]
+    k = 2 * pi / landa
+
+    # Compute Airy disk (focal spot) size
+    dx = taillefenetre / nbpixel
+    waist_focal = 1.22 * landa * f / (2 * dx)
+
+    # Coordinate system
+    x = np.linspace(-taillefenetre/2, taillefenetre/2, nbpixel)
+    X, Y = np.meshgrid(x, x)
+    R = np.sqrt(X**2 + Y**2)
+
+    # Binary top-hat
+    radius = ratio_radius_on_waist * waist_focal
+    binary_target = (R <= radius).astype(float)
+
+    # Gaussian approximation of PSF
+    sigma = waist_focal / 2.3548  # FWHM to sigma
+    PSF = np.exp(-R**2 / (2 * sigma**2))
+    PSF /= PSF.sum()
+
+    # Convolve to obtain soft target
+    target = fftconvolve(binary_target, PSF, mode='same')
+    target /= target.max()
+
+    # Initialize phase using back-propagated target
+    field = np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(target)))
+    phase = np.angle(field)
+
+    # IFTA iterations
+    amplitude_source = np.abs(source)
+    for _ in range(iterations):
+        field = amplitude_source * np.exp(1j * phase)
+        field_f = np.fft.ifftshift(np.fft.fft2(np.fft.fftshift(field)))
+        field_f = target * np.exp(1j * np.angle(field_f))
+        field = np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(field_f)))
+        phase = np.angle(field)
+
+    return source * np.exp(1j * phase)
+
+
 def apply_blur(field, blur_sigma):
     """
     Applique un flou gaussien à la phase spatiale d'un faisceau laser.
@@ -598,6 +685,8 @@ def plot_propagation_3D(fields, z_planes, taillefenetre, recordGIF=False, parame
         print(f"GIF en niveaux de gris sauvegardé sous : {grey_gif_filename}")
         print(f"Images colormap sauvegardées dans : {png_save_dir}")
         print(f"Fichier README sauvegardé sous : {readme_filename}")
+
+
 
 
 
